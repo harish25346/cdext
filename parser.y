@@ -1,92 +1,76 @@
 %{
-    #include <stdio.h>
-    #include <stdlib.h>
-    #include <string.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 
-    int yylex();
-    void yyerror(const char *msg);
+// Symbol table for variables
+struct {
+    char *id;
+    int val;
+} symtab[100];
+int symtab_size = 0;
 
-    // Define a simple symbol table
-    struct SymbolTable {
-        char name[50];
-        double value;
-    } symbols[100];
-
-    int symbolCount = 0;
-
-    // Function to store a variable's value
-    void storeVariable(char* name, double value) {
-        for (int i = 0; i < symbolCount; i++) {
-            if (strcmp(symbols[i].name, name) == 0) {
-                symbols[i].value = value;
-                return;
-            }
-        }
-        strcpy(symbols[symbolCount].name, name);
-        symbols[symbolCount].value = value;
-        symbolCount++;
-    }
-
-    // Function to retrieve a variable's value
-    double getVariable(char* name) {
-        for (int i = 0; i < symbolCount; i++) {
-            if (strcmp(symbols[i].name, name) == 0) {
-                return symbols[i].value;
-            }
-        }
-        yyerror("Undefined variable!");
-        return 0;
-    }
+void yyerror(const char *s) {
+    fprintf(stderr, "Error: %s\n", s);
+}
 %}
 
 %union {
-    double num_val;
-    char id_name[50];
+    int num;
+    char *id;
 }
 
-%token <num_val> NUM
-%token <id_name> ID
-%type <num_val> expr term factor
+%token <num> NUMBER
+%token <id> IDENTIFIER
+%token PLUS MINUS MULTIPLY DIVIDE LPAREN RPAREN ASSIGN SEMICOLON
+
+%type <num> expr
 
 %%
 
-statement : ID '=' expr ';' { 
-                storeVariable($1, $3);
-                printf("\nValid expression! Result = %.2f\n", $3);
-            }
-          ;
+program:
+    | program statement SEMICOLON
+    ;
 
-expr  : term                 { $$ = $1; }
-      | expr '+' term        { $$ = $1 + $3; }
-      | expr '-' term        { $$ = $1 - $3; }
-      ;
-
-term  : factor               { $$ = $1; }
-      | term '*' factor      { $$ = $1 * $3; }
-      | term '/' factor      { 
-            if ($3 == 0) {
-                yyerror("Division by zero!");
-                $$ = 0;
-            } else {
-                $$ = $1 / $3;
+statement:
+    IDENTIFIER ASSIGN expr { 
+        // Assign value to variable
+        for (int i = 0; i < symtab_size; i++) {
+            if (strcmp(symtab[i].id, $1) == 0) {
+                symtab[i].val = $3;
+                return;
             }
         }
-      ;
+        symtab[symtab_size].id = $1;
+        symtab[symtab_size].val = $3;
+        symtab_size++;
+    }
+    ;
 
-factor: NUM                  { $$ = $1; }
-      | ID                   { $$ = getVariable($1); }
-      | '(' expr ')'         { $$ = $2; }
-      | '-' factor           { $$ = -$2; }
-      ;
+expr:
+    NUMBER                { $$ = $1; }
+    | IDENTIFIER          { 
+        // Look up variable value
+        for (int i = 0; i < symtab_size; i++) {
+            if (strcmp(symtab[i].id, $1) == 0) {
+                $$ = symtab[i].val;
+                return;
+            }
+        }
+        yyerror("Undefined variable");
+        exit(1);
+    }
+    | expr PLUS expr      { $$ = $1 + $3; }
+    | expr MINUS expr     { $$ = $1 - $3; }
+    | expr MULTIPLY expr  { $$ = $1 * $3; }
+    | expr DIVIDE expr    { $$ = $1 / $3; }
+    | LPAREN expr RPAREN  { $$ = $2; }
+    ;
 
 %%
 
-void yyerror(const char *msg) {
-    printf("\nError: %s\n", msg);
-}
-
 int main() {
-    printf("\nEnter the expression:\n");
+    printf("Enter arithmetic expressions (e.g., 'x = 2 + 3;'):\n");
     yyparse();
     return 0;
 }
